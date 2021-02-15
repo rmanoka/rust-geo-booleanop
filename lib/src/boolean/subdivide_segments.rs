@@ -39,36 +39,36 @@ where
 
         if event.is_left() {
             sweep_line.insert(event.clone());
+            let maybe_prev = sweep_line.prev(&event).cloned();
+            let maybe_next = sweep_line.next(&event).cloned();
 
-            let maybe_prev = sweep_line.prev(&event);
-            let maybe_next = sweep_line.next(&event);
+            compute_fields(&event, maybe_prev.as_ref(), operation);
 
-            compute_fields(&event, maybe_prev, operation);
-
-            if let Some(next) = maybe_next {
+            if let Some(next) = &maybe_next {
                 #[cfg(feature = "debug-booleanop")]
                 {
                     println!("{{\"seNextEvent\": {}}}", next.to_json_debug());
                 }
-                if possible_intersection(&event, &next, event_queue) == 2 {
+                if possible_intersection(&event, &next, event_queue, &mut sweep_line) == 2 {
                     // Recompute fields for current segment and the one above (in bottom to top order)
-                    compute_fields(&event, maybe_prev, operation);
+                    compute_fields(&event, maybe_prev.as_ref(), operation);
                     compute_fields(&next, Some(&event), operation);
                 }
             }
 
-            if let Some(prev) = maybe_prev {
+            if let Some(prev) = &maybe_prev {
                 #[cfg(feature = "debug-booleanop")]
                 {
                     println!("{{\"sePrevEvent\": {}}}", prev.to_json_debug());
                 }
-                if possible_intersection(&prev, &event, event_queue) == 2 {
+                if possible_intersection(&prev, &event, event_queue, &mut sweep_line) == 2 {
                     let maybe_prev_prev = sweep_line.prev(&prev);
                     // Recompute fields for current segment and the one below (in bottom to top order)
                     compute_fields(&prev, maybe_prev_prev, operation);
                     compute_fields(&event, Some(prev), operation);
                 }
             }
+
         } else if let Some(other_event) = event.get_other_event() {
             // This debug assert is only true, if we compare segments in the sweep line
             // based on identity (curently), and not by value (done previously).
@@ -87,7 +87,7 @@ where
                         println!("{{\"sePostNextEvent\": {}}}", next.to_json_debug());
                         println!("{{\"sePostPrevEvent\": {}}}", prev.to_json_debug());
                     }
-                    possible_intersection(&prev, &next, event_queue);
+                    possible_intersection(&prev, &next, event_queue, &mut sweep_line);
                 }
 
                 #[cfg(feature = "debug-booleanop")]

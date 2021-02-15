@@ -1,15 +1,20 @@
 use super::helper::Float;
 use super::sweep_event::SweepEvent;
 use geo_types::Coordinate;
-use std::collections::BinaryHeap;
+use std::{cmp::Ordering, collections::BinaryHeap};
 use std::rc::Rc;
 
 #[cfg(feature = "debug-booleanop")]
 use super::sweep_event::JsonDebug;
+use crate::splay::SplaySet;
 
-pub fn divide_segment<F>(se_l: &Rc<SweepEvent<F>>, inter: Coordinate<F>, queue: &mut BinaryHeap<Rc<SweepEvent<F>>>)
+pub fn divide_segment<F, C>(
+    se_l: &Rc<SweepEvent<F>>, inter: Coordinate<F>, queue: &mut BinaryHeap<Rc<SweepEvent<F>>>,
+    container: &mut SplaySet<Rc<SweepEvent<F>>, C>,
+)
 where
     F: Float,
+    C: for<'r, 's> Fn(&'r Rc<SweepEvent<F>>, &'s Rc<SweepEvent<F>>) -> Ordering,
 {
     debug_assert!(se_l.is_left());
 
@@ -74,7 +79,12 @@ where
         l.set_left(false);
     }
 
+    let is_removed = container.remove(&se_l);
     se_l.set_other_event(&r);
+    if is_removed {
+        container.insert(se_l.clone());
+    }
+
     se_r.set_other_event(&l);
 
     queue.push(l);
@@ -89,6 +99,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::boolean::compare_segments::compare_segments;
+
     use super::super::segment_intersection::{intersection, LineIntersection};
     use super::super::sweep_event::SweepEvent;
     use super::*;
@@ -130,8 +142,10 @@ mod test {
             _ => panic!("Not a point intersection"),
         };
 
-        divide_segment(&se1, inter, &mut queue);
-        divide_segment(&se2, inter, &mut queue);
+        let mut sweep_line = SplaySet::<Rc<SweepEvent<f64>>, _>::new(compare_segments);
+
+        divide_segment(&se1, inter, &mut queue, &mut sweep_line);
+        divide_segment(&se2, inter, &mut queue, &mut sweep_line);
 
         assert_eq!(queue.len(), 6);
     }

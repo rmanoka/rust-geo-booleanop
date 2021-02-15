@@ -2,16 +2,21 @@ use super::divide_segment::divide_segment;
 use super::helper::Float;
 use super::segment_intersection::{intersection, LineIntersection};
 use super::sweep_event::{EdgeType, SweepEvent};
-use std::collections::BinaryHeap;
+use std::{cmp::Ordering, collections::BinaryHeap};
 use std::rc::Rc;
 
-pub fn possible_intersection<F>(
+use crate::splay::SplaySet;
+
+pub fn possible_intersection<F, C>
+    (
     se1: &Rc<SweepEvent<F>>,
     se2: &Rc<SweepEvent<F>>,
     queue: &mut BinaryHeap<Rc<SweepEvent<F>>>,
+    container: &mut SplaySet<Rc<SweepEvent<F>>, C>,
 ) -> u8
 where
     F: Float,
+    C: for<'r, 's> Fn(&'r Rc<SweepEvent<F>>, &'s Rc<SweepEvent<F>>) -> Ordering,
 {
     let (other1, other2) = match (se1.get_other_event(), se2.get_other_event()) {
         (Some(other1), Some(other2)) => (other1, other2),
@@ -47,10 +52,10 @@ where
         }
         LineIntersection::Point(inter) => {
             if se1.point != inter && other1.point != inter {
-                divide_segment(&se1, inter, queue);
+                divide_segment(&se1, inter, queue, container);
             }
             if se2.point != inter && other2.point != inter {
-                divide_segment(&se2, inter, queue);
+                divide_segment(&se2, inter, queue, container);
             }
             1
         }
@@ -90,21 +95,21 @@ where
                 }
 
                 if left_coincide && !right_coincide {
-                    divide_segment(&events[1].1, events[0].0.point, queue)
+                    divide_segment(&events[1].1, events[0].0.point, queue, container)
                 }
                 return 2;
             }
 
             if right_coincide {
                 // the line segments share the right endpoint
-                divide_segment(&events[0].0, events[1].0.point, queue);
+                divide_segment(&events[0].0, events[1].0.point, queue, container);
                 return 3;
             }
 
             if !Rc::ptr_eq(&events[0].0, &events[3].1) {
                 // no line segment includes totally the other one
-                divide_segment(&events[0].0, events[1].0.point, queue);
-                divide_segment(&events[1].0, events[2].0.point, queue);
+                divide_segment(&events[0].0, events[1].0.point, queue, container);
+                divide_segment(&events[1].0, events[2].0.point, queue, container);
                 return 3;
             }
 
@@ -113,8 +118,8 @@ where
             // via events[3].1 because that is only a static reference, and the first divide segment
             // internally modifies the other event point (we must access the updated other event).
             // Probably the best solution is to introduce explicit return types for divide_segment.
-            divide_segment(&events[0].0, events[1].0.point, queue);
-            divide_segment(&events[3].0.get_other_event().unwrap(), events[2].0.point, queue);
+            divide_segment(&events[0].0, events[1].0.point, queue, container);
+            divide_segment(&events[3].0.get_other_event().unwrap(), events[2].0.point, queue, container);
 
             3
         }
